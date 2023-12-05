@@ -9,6 +9,8 @@
   },
   "dependencies": {
     "0xsequence": "^1.4.9",
+    "@0xsequence/auth": "^1.4.9",
+    "@0xsequence/network": "^1.4.9",
     "ethers": "^5.7.2"
   },
   "devDependencies": {
