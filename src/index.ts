@@ -1,5 +1,5 @@
 //
-// cloudflare-worker-ethers
+// cloudflare-worker-relayer
 //
 
 // Specify window on global so we can ensure that `window.fetch` is available
@@ -7,22 +7,11 @@
 globalThis.window = globalThis
 
 import { ethers } from 'ethers'
+import { Session } from '@0xsequence/auth'
+const contractAddress = '0x4574ca5b8b16d8e36d26c7e3dbeffe81f6f031f7'
 
 export interface Env {
-	// Example binding to KV. Learn more at https://developers.cloudflare.com/workers/runtime-apis/kv/
-	// MY_KV_NAMESPACE: KVNamespace;
-	//
-	// Example binding to Durable Object. Learn more at https://developers.cloudflare.com/workers/runtime-apis/durable-objects/
-	// MY_DURABLE_OBJECT: DurableObjectNamespace;
-	//
-	// Example binding to R2. Learn more at https://developers.cloudflare.com/workers/runtime-apis/r2/
-	// MY_BUCKET: R2Bucket;
-	//
-	// Example binding to a Service. Learn more at https://developers.cloudflare.com/workers/runtime-apis/service-bindings/
-	// MY_SERVICE: Fetcher;
-	//
-	// Example binding to a Queue. Learn more at https://developers.cloudflare.com/queues/javascript-apis/
-	// MY_QUEUE: Queue;
+	PKEY: string;
 }
 
 // TODO: update example to include sequence relayer stuff... etc..
@@ -35,13 +24,40 @@ const provider = new ethers.providers.StaticJsonRpcProvider({ url: nodeUrl, skip
 
 export default {
 	async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
-		const blockNumber = await getBlockNumber(request)
-		return new Response(`Hello World! ${blockNumber}`)
+		const res = await call(request, env)
+		return new Response(`Hello World! ${res}`)
 	}
 }
 
-const getBlockNumber = async (request: Request): Promise<number> => {
-	const blockNumber = await provider.getBlockNumber()
-	console.log(blockNumber)
-	return blockNumber
+const call = async (request: Request, env: Env): Promise<any> => {
+
+	const walletEOA = new ethers.Wallet(env.PKEY, provider);
+
+	// Open a Sequence session, this will find or create
+	// a Sequence wallet controlled by your server EOA
+	const session = await Session.singleSigner({
+		signer: walletEOA,
+	})
+	
+	const signer = session.account.getSigner(137)
+		
+	const demoCoinInterface = new ethers.utils.Interface([
+		'function mint()'
+	])
+		
+	const data = demoCoinInterface.encodeFunctionData(
+		'mint', []
+	)
+
+	const txn = {
+		to: contractAddress,
+		data
+	}
+
+    try {
+        const res = await signer.sendTransaction(txn)
+		return res
+	}catch(err){
+		return 'ERROR'
+	}
 }
