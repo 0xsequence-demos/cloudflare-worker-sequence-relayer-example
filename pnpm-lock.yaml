@@ -11,6 +11,9 @@ dependencies:
   '@0xsequence/auth':
     specifier: ^1.4.9
     version: 1.4.9(ethers@5.7.2)
+  '@0xsequence/network':
+    specifier: ^1.4.9
+    version: 1.4.9(ethers@5.7.2)
   ethers:
     specifier: ^5.7.2
     version: 5.7.2

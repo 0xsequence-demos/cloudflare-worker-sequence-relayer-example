@@ -2,11 +2,15 @@ name = "cloudflare-worker-sequence-relayer"
 main = "src/index.ts"
 compatibility_date = "2023-11-21"
 
+# node_compat is required in order for the worker to be able
+# to use window.fetch.
+node_compat = true
+
 # Variable bindings. These are arbitrary, plaintext strings (similar to environment variables)
 # Note: Use secrets to store sensitive data.
 # Docs: https://developers.cloudflare.com/workers/platform/environment-variables
-# [vars]
-# PKEY = ""
+[vars]
+PKEY = ""
 
 # Bind a KV Namespace. Use KV as persistent storage for small key-value pairs.
 # Docs: https://developers.cloudflare.com/workers/runtime-apis/kv
