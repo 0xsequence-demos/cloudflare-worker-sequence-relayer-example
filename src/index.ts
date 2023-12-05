@@ -16,7 +16,7 @@ export interface Env {
 // the skipFetchSetup and also the chainId
 const nodeUrl = 'https://nodes.sequence.app/polygon'
 const relayerUrl = 'https://polygon-relayer.sequence.app'
-const chainId = 137
+const chainId = ChainId.POLYGON
 const provider = new ethers.providers.StaticJsonRpcProvider({ url: nodeUrl, skipFetchSetup: true }, chainId)
 
 export default {
@@ -26,11 +26,11 @@ export default {
 		}
 
 		const res = await call(request, env)
-		return new Response(`Hello World! ${res}`)
+		return new Response(`Hello World! Minted txn: ${res.hash}`)
 	}
 }
 
-const call = async (request: Request, env: Env): Promise<any> => {
+const call = async (request: Request, env: Env): Promise<ethers.providers.TransactionResponse> => {
 
 	const walletEOA = new ethers.Wallet(env.PKEY, provider);
 
@@ -42,6 +42,7 @@ const call = async (request: Request, env: Env): Promise<any> => {
 		networks: [{
 			...networks[ChainId.POLYGON],
 			rpcUrl: nodeUrl,
+			provider: provider, // NOTE: must pass the provider here
 			relayer: {
 				url: relayerUrl,
 				provider: {
@@ -55,7 +56,7 @@ const call = async (request: Request, env: Env): Promise<any> => {
 		settings: settings,
 		signer: walletEOA,
 	})
-	
+
 	const signer = session.account.getSigner(chainId)
 		
 	const demoCoinInterface = new ethers.utils.Interface([
@@ -75,6 +76,7 @@ const call = async (request: Request, env: Env): Promise<any> => {
 		const res = await signer.sendTransaction(txn)
 		return res
 	} catch (err) {
-		return `ERROR: ${err}`
+		console.error(`ERROR: ${err}`)
+		throw err
 	}
 }
