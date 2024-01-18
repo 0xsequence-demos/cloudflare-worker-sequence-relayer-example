@@ -11,6 +11,9 @@ node_compat = true
 # Docs: https://developers.cloudflare.com/workers/platform/environment-variables
 [vars]
 PKEY = ""
+CONTRACT_ADDRESS = ""
+PROJECT_ACCESS_KEY = ""
+CHAIN_HANDLE = ""
 
 # Bind a KV Namespace. Use KV as persistent storage for small key-value pairs.
 # Docs: https://developers.cloudflare.com/workers/runtime-apis/kv
