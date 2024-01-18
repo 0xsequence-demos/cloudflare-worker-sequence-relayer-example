@@ -39,7 +39,6 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
 
 	if (env.PROJECT_ACCESS_KEY === undefined || env.PROJECT_ACCESS_KEY === '') {
 		return new Response('Make sure PROJECT_ACCESS_KEY is configured in your environment', { status: 400 })
-
 	}
 
 	if (env.CHAIN_HANDLE === undefined || env.CHAIN_HANDLE === '') {
@@ -60,6 +59,7 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
 			const txn = await callContract(env, chainConfig, address, tokenId)
 			return new Response(`${txn.hash}`, { status: 201 })
 		} catch(error: any) {
+			console.log(error)
 			return new Response(JSON.stringify(error), { status: 400 })
 		}
 	} else {
@@ -80,7 +80,7 @@ const callContract = async (env: Env, chainConfig: NetworkConfig, address: strin
 	// a Sequence wallet controlled by your server EOA
 	const settings: Partial<SessionSettings> = {
 		networks: [{
-			...networks[env.CHAIN_HANDLE],
+			...networks[chainConfig.chainId],
 			rpcUrl: chainConfig.rpcUrl,
 			provider: provider, // NOTE: must pass the provider here
 			relayer: {
@@ -99,7 +99,7 @@ const callContract = async (env: Env, chainConfig: NetworkConfig, address: strin
 		projectAccessKey: env.PROJECT_ACCESS_KEY
 	})
 
-	const signer = session.account.getSigner(env.CHAIN_HANDLE)
+	const signer = session.account.getSigner(chainConfig.chainId)
 	
 	// Standard interface for ERC1155 contract deployed via Sequence Builder
 	const collectibleInterface = new ethers.utils.Interface([
