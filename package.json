@@ -7,15 +7,15 @@
     "dev": "wrangler dev",
     "start": "wrangler dev"
   },
-  "dependencies": {
-    "0xsequence": "^1.4.9",
-    "@0xsequence/auth": "^1.4.9",
-    "@0xsequence/network": "^1.4.9",
-    "ethers": "^5.7.2"
-  },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20231121.0",
+    "@cloudflare/workers-types": "^4.20240117.0",
     "typescript": "^5.0.4",
-    "wrangler": "^3.19.0"
+    "wrangler": "^3.0.0"
+  },
+  "dependencies": {
+    "0xsequence": "^1.6.3",
+    "@0xsequence/auth": "^1.6.3",
+    "@0xsequence/network": "^1.6.3",
+    "ethers": "5.7.2"
   }
 }

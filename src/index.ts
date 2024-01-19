@@ -1,24 +1,15 @@
-//
-// cloudflare-worker-relayer
-//
 import { sequence } from '0xsequence'
+import { networks, findSupportedNetwork, toChainIdNumber, NetworkConfig } from '@0xsequence/network'
+
 import { ethers } from 'ethers'
 import { Session, SessionSettings } from '@0xsequence/auth'
-import { networks, ChainId } from '@0xsequence/network'
-
-const contractAddress = '0x68680bc16af8f0b29471bc3196d7cbb7248810a2'
 
 export interface Env {
-	PKEY: string;
+	PKEY: string; // Private key for EOA wallet
+	CONTRACT_ADDRESS: string; // Deployed ERC1155 or ERC721 contract address
+	PROJECT_ACCESS_KEY: string; // From sequence.build
+	CHAIN_HANDLE: string; // Standardized chain name – See https://docs.sequence.xyz/multi-chain-support
 }
-
-// the skipFetchSetup and also the chainId
-const nodeUrl = 'https://nodes.sequence.app/arbitrum'
-const relayerUrl = 'https://arbitrum-relayer.sequence.app'
-const chainId = ChainId.ARBITRUM
-
-// ethers provider -- here its important to use the static jcson rpc provider passing
-const provider = new ethers.providers.StaticJsonRpcProvider({ url: nodeUrl, skipFetchSetup: true }, chainId)
 
 // use the sequence api to verify proof came from a sequence wallet
 const verify = async (chainId: string, walletAddress: string, ethAuthProofString: string): Promise<Boolean> => {
@@ -29,34 +20,39 @@ const verify = async (chainId: string, walletAddress: string, ethAuthProofString
 	return isValid
 }
 
-export default {
-	async fetch(request: Request, env: Env, ctx: ExecutionContext) {
-		// Process the request and create a response
-		const response = await handleRequest(request, env, ctx);
-
-		// Set CORS headers
-		response.headers.set("Access-Control-Allow-Origin", "*"); // change as needed
-		response.headers.set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
-		response.headers.set("Access-Control-Allow-Headers", "Content-Type");
-
-		// return response
-		return response;
-	}
-};
-
 async function handleRequest(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
 	if (env.PKEY === undefined || env.PKEY === '') {
-		console.log('ooops! check your wranger.toml config to set your PKEY or set in wrangler env variables.')
+		return new Response('Make sure PKEY is configured in your environment', { status: 400 })
 	}
 
+	if (env.CONTRACT_ADDRESS === undefined || env.CONTRACT_ADDRESS === '') {
+		return new Response('Make sure CONTRACT_ADDRESS is configured in your environment', { status: 400 })
+	}
+
+	if (env.PROJECT_ACCESS_KEY === undefined || env.PROJECT_ACCESS_KEY === '') {
+		return new Response('Make sure PROJECT_ACCESS_KEY is configured in your environment', { status: 400 })
+	}
+
+	if (env.CHAIN_HANDLE === undefined || env.CHAIN_HANDLE === '') {
+		return new Response('Make sure CHAIN_HANDLE is configured in your environment', { status: 400 })
+	}
+
+	const chainConfig = findSupportedNetwork(env.CHAIN_HANDLE)
+
+	if (chainConfig === undefined) {
+		return new Response('Unsupported network or unknown CHAIN_HANDLE', { status: 400 })
+	}
+
+	// POST request
 	if (request.method === "POST") {
 		// parse the request body as JSON
 		const body = await request.json();
-		const { proof, address }: any = body;
+		const { proof, address, tokenId }: any = body;
 		try {
-			if(await verify('arbitrum', address, proof)){
+			// check that the proof is valid
+			if(await verify(env.CHAIN_HANDLE, address, proof)){
 				try{
-					const res = await call(request, env, address)
+					const res = await callContract(request, env, address, tokenId)
 					return new Response(`${res.hash}`, { status: 200 })
 				} catch (err: any) {
 					console.log(err)
@@ -68,9 +64,11 @@ async function handleRequest(request: Request, env: Env, ctx: ExecutionContext):
 		} catch(err: any){
 			return new Response(`Unauthorized ${JSON.stringify(err)}`, { status: 401 })
 		}
-	} else {
+	} 
+	// GET request
+	else {
 		try {
-			const res = await getBlockNumber(request)
+			const res = await getBlockNumber(env.CHAIN_HANDLE, request)
 			return new Response(`Block Number: ${res}`)
 		} catch(err: any){
 			return new Response(`Something went wrong: ${JSON.stringify(err)}`, { status: 400 })
@@ -78,49 +76,75 @@ async function handleRequest(request: Request, env: Env, ctx: ExecutionContext):
 	}
 }
 
-const getBlockNumber = async (request: Request): Promise<number> => {
+const getBlockNumber = async (chainHandle: string, request: Request): Promise<number> => {
+	const nodeUrl = `https://nodes.sequence.app/${chainHandle}`
+	const provider = new ethers.providers.JsonRpcProvider({ url: nodeUrl, skipFetchSetup: true })
+
 	return await provider.getBlockNumber()
 }
 
-const call = async (request: Request, env: Env, address: string): Promise<ethers.providers.TransactionResponse> => {
+const callContract = async (request: Request, env: Env, address: string, tokenId: number): Promise<ethers.providers.TransactionResponse> => {
+	const relayerUrl = `https://${env.CHAIN_HANDLE}-relayer.sequence.app`
+	const nodeUrl = `https://nodes.sequence.app/${env.CHAIN_HANDLE}`
+	const provider = new ethers.providers.JsonRpcProvider({ url: nodeUrl, skipFetchSetup: true })
 
-	const walletEOA = new ethers.Wallet(env.PKEY, provider);
-
-	// TODO: this is so ugly, we need to fix this in sequence.js
-	const settings: Partial<SessionSettings> = {
-		networks: [{
-			...networks[ChainId.ARBITRUM],
-			rpcUrl: nodeUrl,
-			provider: provider, // NOTE: must pass the provider here
-			relayer: {
-				url: relayerUrl,
-				provider: {
-					url: nodeUrl
+		const contractAddress = env.CONTRACT_ADDRESS
+	
+		// create EOA from private key
+		const walletEOA = new ethers.Wallet(env.PKEY, provider);
+	
+		// instantiate settings
+		const settings: Partial<SessionSettings> = {
+			networks: [{
+				...networks[findSupportedNetwork(env.CHAIN_HANDLE)!.chainId],
+				rpcUrl: findSupportedNetwork(env.CHAIN_HANDLE)!.rpcUrl,
+				provider: provider,
+				relayer: {
+					url: relayerUrl,
+					provider: {
+						url: findSupportedNetwork(env.CHAIN_HANDLE)!.rpcUrl
+					}
 				}
-			}
-		}],
-	}
-
-	const session = await Session.singleSigner({
-		settings: settings,
-		signer: walletEOA,
-	})
-
-	const signer = session.account.getSigner(chainId)
-		
-	const collectibleInterface = new ethers.utils.Interface([
-		'function mint(address collector)'
-	])
-		
-	const data = collectibleInterface.encodeFunctionData(
-		'mint', [address]
-	)
-
-	const txn = { to: contractAddress, data }
-
-	try {
-		return await signer.sendTransaction(txn)
-	} catch (err) {
-		throw err
-	}
+			}],
+		}
+	
+		// create a single signer sequence wallet session
+		const session = await Session.singleSigner({
+			settings: settings,
+			signer: walletEOA,
+			projectAccessKey: env.PROJECT_ACCESS_KEY
+		})
+	
+		const signer = session.account.getSigner(findSupportedNetwork(env.CHAIN_HANDLE)!.chainId)
+			
+		const collectibleInterface = new ethers.utils.Interface([
+			'function mint(address to, uint256 tokenId, uint256 amount, bytes data)'
+		])
+			
+		const data = collectibleInterface.encodeFunctionData(
+			'mint', [address, tokenId, 1, "0x00"]
+		)
+	
+		const txn = { to: contractAddress, data }
+	
+		try {
+			return await signer.sendTransaction(txn)
+		} catch (err) {
+			throw err
+		}
 }
+
+export default {
+	async fetch(request: Request, env: Env, ctx: ExecutionContext) {
+		// Process the request and create a response
+		const response = await handleRequest(request, env, ctx);
+
+		// Set CORS headers
+		response.headers.set("Access-Control-Allow-Origin", "*");
+		response.headers.set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+		response.headers.set("Access-Control-Allow-Headers", "Content-Type");
+
+		// return response
+		return response;
+	}
+};
