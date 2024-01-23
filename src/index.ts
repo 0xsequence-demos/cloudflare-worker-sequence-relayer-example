@@ -4,77 +4,119 @@
 
 import { ethers } from 'ethers'
 import { Session, SessionSettings } from '@0xsequence/auth'
-import { networks, ChainId } from '@0xsequence/network'
+import { networks, findSupportedNetwork, toChainIdNumber, NetworkConfig } from '@0xsequence/network'
 
-const contractAddress = '0x4574ca5b8b16d8e36d26c7e3dbeffe81f6f031f7'
-
+// These env variables should be set under wrangler.toml or via `wrangler secret put` command
+// Warning: Always use `wrangler secret put` for PKEY since it's sensitive
 export interface Env {
-	PKEY: string;
+	PKEY: string; // Private key for EOA wallet
+	CONTRACT_ADDRESS: string; // Deployed ERC1155 or ERC721 contract address
+	PROJECT_ACCESS_KEY: string; // From sequence.build
+	CHAIN_HANDLE: string; // Standardized chain name – See https://docs.sequence.xyz/multi-chain-support
 }
-
-// ethers provider -- here its important to use the static jcson rpc provider passing
-// the skipFetchSetup and also the chainId
-const nodeUrl = 'https://nodes.sequence.app/polygon'
-const relayerUrl = 'https://polygon-relayer.sequence.app'
-const chainId = ChainId.POLYGON
-const provider = new ethers.providers.StaticJsonRpcProvider({ url: nodeUrl, skipFetchSetup: true }, chainId)
 
 export default {
 	async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
-		if (env.PKEY === undefined || env.PKEY === '') {
-			console.log('ooops! check your wranger.toml config to set your PKEY')
-		}
+		const response = await handleRequest(request, env)
 
-		const res = await call(request, env)
-		return new Response(`Hello World! Minted txn: ${res.hash}`)
+		// Set CORS headers
+		response.headers.set("Access-Control-Allow-Origin", "*");
+		response.headers.set("Access-Control-Allow-Methods", "GET, POST");
+		response.headers.set("Access-Control-Allow-Headers", "Content-Type");
+
+		return response
 	}
 }
 
-const call = async (request: Request, env: Env): Promise<ethers.providers.TransactionResponse> => {
+async function handleRequest(request: Request, env: Env): Promise<Response> {
+	if (env.PKEY === undefined || env.PKEY === '') {
+		return new Response('Make sure PKEY is configured in your environment', { status: 400 })
+	}
+
+	if (env.CONTRACT_ADDRESS === undefined || env.CONTRACT_ADDRESS === '') {
+		return new Response('Make sure CONTRACT_ADDRESS is configured in your environment', { status: 400 })
+	}
+
+	if (env.PROJECT_ACCESS_KEY === undefined || env.PROJECT_ACCESS_KEY === '') {
+		return new Response('Make sure PROJECT_ACCESS_KEY is configured in your environment', { status: 400 })
+	}
+
+	if (env.CHAIN_HANDLE === undefined || env.CHAIN_HANDLE === '') {
+		return new Response('Make sure CHAIN_HANDLE is configured in your environment', { status: 400 })
+	}
+
+	const chainConfig = findSupportedNetwork(env.CHAIN_HANDLE)
+
+	if (chainConfig === undefined) {
+		return new Response('Unsupported network or unknown CHAIN_HANDLE', { status: 400 })
+	}
+
+	if (request.method === "POST") {
+		const payload = await request.json()
+		const { address, tokenId }: any = payload
+
+		try {
+			const txn = await callContract(env, chainConfig, address, tokenId)
+			return new Response(`${txn.hash}`, { status: 201 })
+		} catch(error: any) {
+			console.log(error)
+			return new Response(JSON.stringify(error), { status: 400 })
+		}
+	} else {
+		return new Response("Minter ready", { status: 200 })
+	}
+}
+
+const callContract = async (env: Env, chainConfig: NetworkConfig, address: string, tokenId: number): Promise<ethers.providers.TransactionResponse> => {
+	const provider = new ethers.providers.StaticJsonRpcProvider({
+		url: chainConfig.rpcUrl, 
+		skipFetchSetup: true // Required for ethers.js Cloudflare Worker support
+	})
 
 	const walletEOA = new ethers.Wallet(env.PKEY, provider);
+	const relayerUrl = `https://${chainConfig.name}-relayer.sequence.app`
 
 	// Open a Sequence session, this will find or create
 	// a Sequence wallet controlled by your server EOA
-
-	// TODO: this is so ugly, we need to fix this in sequence.js
 	const settings: Partial<SessionSettings> = {
 		networks: [{
-			...networks[ChainId.POLYGON],
-			rpcUrl: nodeUrl,
+			...networks[chainConfig.chainId],
+			rpcUrl: chainConfig.rpcUrl,
 			provider: provider, // NOTE: must pass the provider here
 			relayer: {
 				url: relayerUrl,
 				provider: {
-					url: nodeUrl
+					url: chainConfig.rpcUrl
 				}
 			}
 		}],
 	}
 
+	// Create a single signer sequence wallet session
 	const session = await Session.singleSigner({
 		settings: settings,
 		signer: walletEOA,
+		projectAccessKey: env.PROJECT_ACCESS_KEY
 	})
 
-	const signer = session.account.getSigner(chainId)
-		
-	const demoCoinInterface = new ethers.utils.Interface([
-		'function mint()'
+	const signer = session.account.getSigner(chainConfig.chainId)
+	
+	// Standard interface for ERC1155 contract deployed via Sequence Builder
+	const collectibleInterface = new ethers.utils.Interface([
+		'function mint(address to, uint256 tokenId, uint256 amount, bytes data)'
 	])
 		
-	const data = demoCoinInterface.encodeFunctionData(
-		'mint', []
+	const data = collectibleInterface.encodeFunctionData(
+		'mint', [`${address}`, `${tokenId}`, "1", "0x00"]
 	)
 
 	const txn = {
-		to: contractAddress,
-		data
+		to: env.CONTRACT_ADDRESS, 
+		data: data
 	}
 
 	try {
-		const res = await signer.sendTransaction(txn)
-		return res
+		return await signer.sendTransaction(txn)
 	} catch (err) {
 		console.error(`ERROR: ${err}`)
 		throw err
