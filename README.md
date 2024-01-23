@@ -1,5 +1,9 @@
-cloudflare-worker-sequence-relayer
-==================================
+Serverless Sequence Minter Relayer using Cloudflare Workers
+===========================================================
+
+This repo contains a sample minter implementation that leverages [Cloudflare Workers](https://developers.cloudflare.com/workers/) to deploy a secure and gasless token minter that can be leveraged for minting in-game items and tokens.
+
+You can read a complete tutorial about how to use it [on Sequence Docs](https://docs.sequence.xyz/relayer/mint-collectibles-serverless).
 
 ## Usage
 
@@ -9,6 +13,6 @@ cloudflare-worker-sequence-relayer
 
 ## Deploy
 
-To deploy/publish the cloudflare worker run  `pnpm deploy`.
+To deploy/publish the cloudflare worker, authenticate with wrangler first, then run  `pnpm deploy`.
 
 See https://developers.cloudflare.com/workers/ to learn more.
