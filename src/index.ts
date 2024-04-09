@@ -2,6 +2,7 @@
 // cloudflare-worker-relayer
 //
 
+import { sequence } from '0xsequence'
 import { ethers } from 'ethers'
 import { Session, SessionSettings } from '@0xsequence/auth'
 import { networks, findSupportedNetwork, toChainIdNumber, NetworkConfig } from '@0xsequence/network'
@@ -26,6 +27,12 @@ export default {
 
 		return response
 	}
+}
+
+const verifySignature = async (chainId: string, signature: string, message: string, walletAddress: string): Promise<boolean> => {
+	const api = new sequence.api.SequenceAPIClient('https://api.sequence.app')
+	const { isValid } = await api.isValidMessageSignature({chainId, walletAddress, message, signature})
+	return isValid
 }
 
 async function handleRequest(request: Request, env: Env): Promise<Response> {
@@ -53,10 +60,28 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
 
 	if (request.method === "POST") {
 		const payload = await request.json()
-		const { address, tokenId }: any = payload
+		const { proof, signedProof, address }: any = payload
+		
+		if (await verifySignature(chainConfig.name, signedProof, proof, address) === false) {
+			return new Response('Invalid signature', { status: 400 })
+		}
+
+		const proofPayload = JSON.parse(proof).payload
+		const tokenId = parseInt(proofPayload.tokenId)
+		const amount = parseInt(proofPayload.amount)
+
+		const now = new Date().getTime()
+		const expiration = parseInt(proof.exp)
+		if (expiration < now) {
+			return new Response('Proof has expired', { status: 400 })
+		}
+		const iat = parseInt(proof.iat)
+		if (iat > now) {
+			return new Response('Proof is not yet valid', { status: 400 })
+		}
 
 		try {
-			const txn = await callContract(env, chainConfig, address, tokenId)
+			const txn = await callContract(env, chainConfig, address, tokenId, amount)
 			return new Response(`${txn.hash}`, { status: 201 })
 		} catch(error: any) {
 			console.log(error)
@@ -67,14 +92,14 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
 	}
 }
 
-const callContract = async (env: Env, chainConfig: NetworkConfig, address: string, tokenId: number): Promise<ethers.providers.TransactionResponse> => {
+const callContract = async (env: Env, chainConfig: NetworkConfig, address: string, tokenId: number, amount: number): Promise<ethers.providers.TransactionResponse> => {
 	const provider = new ethers.providers.StaticJsonRpcProvider({
 		url: chainConfig.rpcUrl, 
 		skipFetchSetup: true // Required for ethers.js Cloudflare Worker support
 	})
 
 	const walletEOA = new ethers.Wallet(env.PKEY, provider);
-	const relayerUrl = `https://${chainConfig.name}-relayer.sequence.app`
+	const relayerUrl = `https://next-${chainConfig.name}-relayer.sequence.app`
 
 	// Open a Sequence session, this will find or create
 	// a Sequence wallet controlled by your server EOA
@@ -107,7 +132,7 @@ const callContract = async (env: Env, chainConfig: NetworkConfig, address: strin
 	])
 		
 	const data = collectibleInterface.encodeFunctionData(
-		'mint', [`${address}`, `${tokenId}`, "1", "0x00"]
+		'mint', [`${address}`, `${tokenId}`, `${amount}`, "0x00"]
 	)
 
 	const txn = {
