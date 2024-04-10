@@ -88,11 +88,15 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
 			return new Response(JSON.stringify(error), { status: 400 })
 		}
 	} else {
+		const signer = await getSigner(env, chainConfig)
+	
+		console.log(await signer.getAddress())
+
 		return new Response("Minter ready", { status: 200 })
 	}
 }
 
-const callContract = async (env: Env, chainConfig: NetworkConfig, address: string, tokenId: number, amount: number): Promise<ethers.providers.TransactionResponse> => {
+const getSigner = async(env: Env, chainConfig: NetworkConfig): Promise<ethers.Signer> => {
 	const provider = new ethers.providers.StaticJsonRpcProvider({
 		url: chainConfig.rpcUrl, 
 		skipFetchSetup: true // Required for ethers.js Cloudflare Worker support
@@ -125,6 +129,11 @@ const callContract = async (env: Env, chainConfig: NetworkConfig, address: strin
 	})
 
 	const signer = session.account.getSigner(chainConfig.chainId)
+	return signer;
+}
+
+const callContract = async (env: Env, chainConfig: NetworkConfig, address: string, tokenId: number, amount: number): Promise<ethers.providers.TransactionResponse> => {
+	const signer = await getSigner(env, chainConfig)
 	
 	// Standard interface for ERC1155 contract deployed via Sequence Builder
 	const collectibleInterface = new ethers.utils.Interface([
