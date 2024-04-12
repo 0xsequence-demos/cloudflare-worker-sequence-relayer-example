@@ -103,7 +103,7 @@ const getSigner = async(env: Env, chainConfig: NetworkConfig): Promise<ethers.Si
 	})
 
 	const walletEOA = new ethers.Wallet(env.PKEY, provider);
-	const relayerUrl = `https://next-${chainConfig.name}-relayer.sequence.app`
+	const relayerUrl = `https://${chainConfig.name}-relayer.sequence.app`
 
 	// Open a Sequence session, this will find or create
 	// a Sequence wallet controlled by your server EOA
