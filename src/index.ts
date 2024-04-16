@@ -66,9 +66,7 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
 		return new Response('Make sure CHAIN_HANDLE is configured in your environment', { status: 400 })
 	}
 
-	const chainConfig = findSupportedNetwork(env.CHAIN_HANDLE)
-
-	if (chainConfig === undefined) {
+	if (findSupportedNetwork(env.CHAIN_HANDLE) === undefined) {
 		return new Response('Unsupported network or unknown CHAIN_HANDLE', { status: 400 })
 	}
 
@@ -77,7 +75,7 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
 		const { address, tokenId }: any = payload
 
 		try {
-			const txn = await callContract(env, chainConfig, address, tokenId)
+			const txn = await callContract(env, address, tokenId)
 			return new Response(`${txn.hash}`, { status: 201 })
 		} catch(error: any) {
 			console.log(error)
@@ -88,7 +86,10 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
 	}
 }
 
-const callContract = async (env: Env, chainConfig: NetworkConfig, address: string, tokenId: number): Promise<ethers.providers.TransactionResponse> => {
+const callContract = async (env: Env, address: string, tokenId: number): Promise<ethers.providers.TransactionResponse> => {
+	
+	const chainConfig: NetworkConfig = findSupportedNetwork(env.CHAIN_HANDLE)
+	
 	const provider = new ethers.providers.StaticJsonRpcProvider({
 		url: chainConfig.rpcUrl, 
 		skipFetchSetup: true // Required for ethers.js Cloudflare Worker support
