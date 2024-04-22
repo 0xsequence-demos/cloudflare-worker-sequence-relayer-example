@@ -1,9 +1,9 @@
-Serverless Sequence Minter Relayer using Cloudflare Workers
+Serverless Sequence Minter Transactions API using Cloudflare Workers
 ===========================================================
 
 This repo contains a sample minter implementation that leverages [Cloudflare Workers](https://developers.cloudflare.com/workers/) to deploy a secure and gasless token minter that can be leveraged for minting in-game items and tokens.
 
-You can read a complete tutorial about how to use it [on Sequence Docs](https://docs.sequence.xyz/relayer/mint-collectibles-serverless).
+You can read a complete tutorial about how to use it [on Sequence Docs](https://docs.sequence.xyz/guides/mint-collectibles-serverless).
 
 ## Usage
 
