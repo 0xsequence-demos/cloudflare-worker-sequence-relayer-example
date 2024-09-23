@@ -69,6 +69,11 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
 		const proofPayload = JSON.parse(proof).payload
 		const tokenId = parseInt(proofPayload.tokenId)
 		const amount = parseInt(proofPayload.amount)
+		const receipt = proofPayload.receipt
+
+		if (receipt !== undefined && receipt !== '') {
+			// Todo: verify iap receipt from Apple/Google
+		}
 
 		const now = new Date().getTime()
 		const expiration = parseInt(proof.exp)
