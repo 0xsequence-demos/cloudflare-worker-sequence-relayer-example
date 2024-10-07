@@ -1,5 +1,7 @@
 {
 	"compilerOptions": {
+		"noUnusedLocals": false,
+    "noUnusedParameters": false,
 		/* Visit https://aka.ms/tsconfig.json to read more about this file */
 
 		/* Projects */
